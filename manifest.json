@@ -1,0 +1,18 @@
+{
+    "name": "Cargo Trim App",
+    "short_name": "Cargo Trim",
+    "description": "Professional Aircraft Cargo Weight & Balance Optimization Tool",
+    "start_url": "./index.html",
+    "display": "standalone",
+    "orientation": "any",
+    "background_color": "#080f1f",
+    "theme_color": "#080f1f",
+    "icons": [
+        {
+            "src": "icon.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any"
+        }
+    ]
+}

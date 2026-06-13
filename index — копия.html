@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cargo Trim Calculator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #e2e8f0;
+            font-family: 'Inter', sans-serif;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+
+<body class="p-4 md:p-6 text-slate-200">
+
+    <div class="max-w-6xl mx-auto space-y-6">
+
+        <!-- Header -->
+        <div class="flex justify-between items-center border-b border-slate-700 pb-4">
+            <div>
+                <h1 class="text-2xl font-bold text-blue-400">Cargo Trim App</h1>
+                <div class="text-xs text-slate-500">v1.6 - Balanced Optimization</div>
+            </div>
+            <select id="typeSelect"
+                class="bg-slate-800 border border-slate-600 rounded px-3 py-1 cursor-pointer hover:border-blue-500">
+                <option value="PMC">PMC (57) - 13 Pos</option>
+                <option value="PAG">PAG (58) - 15 Pos</option>
+            </select>
+        </div>
+
+        <!-- Upper Section: DOW & Fuel -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-slate-800 p-4 rounded-lg shadow-lg">
+                <h3 class="font-semibold text-slate-300 border-b border-slate-600 pb-1 mb-2">Operating Info</h3>
+                <div class="grid grid-cols-2 gap-2 text-sm">
+                    <label class="self-center">DOW (kg)</label>
+                    <input type="number" data-field="dow"
+                        class="calc-input bg-slate-700 rounded p-1 text-right focus:bg-slate-600 ring-blue-500 outline-none focus:ring-1"
+                        placeholder="53905">
+                    <label class="self-center">DOW Index</label>
+                    <input type="number" data-field="dowIndex"
+                        class="calc-input bg-slate-700 rounded p-1 text-right focus:bg-slate-600 ring-blue-500 outline-none focus:ring-1"
+                        placeholder="30.1">
+                </div>
+            </div>
+
+            <div class="bg-slate-800 p-4 rounded-lg shadow-lg">
+                <h3 class="font-semibold text-slate-300 border-b border-slate-600 pb-1 mb-2">Fuel</h3>
+                <div class="grid grid-cols-2 gap-2 text-sm">
+                    <label class="self-center">Fuel on Board</label>
+                    <input type="number" data-field="fob"
+                        class="calc-input bg-slate-700 rounded p-1 text-right focus:bg-slate-600 ring-blue-500 outline-none focus:ring-1"
+                        placeholder="21831">
+                    <label class="self-center">Trip Fuel</label>
+                    <input type="number" data-field="trip"
+                        class="calc-input bg-slate-700 rounded p-1 text-right focus:bg-slate-600 ring-blue-500 outline-none focus:ring-1"
+                        placeholder="15174">
+                </div>
+            </div>
+        </div>
+
+        <!-- Inputs Section -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Main Deck Source -->
+            <div class="lg:col-span-2 bg-slate-800 p-4 rounded-lg shadow-lg">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="font-semibold text-slate-300">Input: Main Deck Cargo</h3>
+                    <div class="text-xs text-slate-500">Enter Weights (Any Order)</div>
+                </div>
+                <div id="mainDeckGrid" class="grid grid-cols-3 sm:grid-cols-4 gap-3"></div>
+            </div>
+
+            <!-- Bulk Source -->
+            <div class="lg:col-span-1 bg-slate-800 p-4 rounded-lg shadow-lg">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="font-semibold text-slate-300">Input: Bulk Items</h3>
+                    <div class="text-xs text-right">
+                        <div class="text-slate-500">Enter loose pcs (max 20)</div>
+                        <div class="text-blue-400 font-mono" id="totalBulkDisplay">0 / 16520 kg</div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-4 gap-2" id="bulkList"></div>
+            </div>
+        </div>
+
+        <!-- Action -->
+        <div class="flex justify-center flex-col items-center space-y-2 mt-4 mb-4">
+            <button id="optimizeBtn"
+                class="bg-blue-600 hover:bg-blue-500 active:bg-blue-700 px-8 py-4 rounded-xl font-bold transition shadow-lg flex items-center gap-3 transform hover:scale-105 border border-blue-400">
+                <span class="text-2xl">⚡</span>
+                <div class="flex flex-col items-start leading-tight">
+                    <span class="text-lg">AUTO-RELOCATE ALL</span>
+                    <span class="text-xs font-normal opacity-80">Target: Total Load Index 20.0 + Spread</span>
+                </div>
+            </button>
+            <div id="optStatus" class="text-xs text-yellow-400 h-4 font-mono"></div>
+        </div>
+
+        <!-- RESULTS / PLAN -->
+        <div id="resultsSection" class="hidden space-y-6">
+
+            <div class="bg-slate-900 border border-slate-700 p-6 rounded-xl shadow-2xl">
+                <h3 class="text-xl font-bold text-green-400 mb-6 flex items-center gap-2">
+                    <span>📋</span> Relocation Plan
+                </h3>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <!-- Lower Deck Instructions -->
+                    <div>
+                        <h4 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">Lower Deck (Bulk)
+                            Allocation</h4>
+                        <div class="overflow-hidden rounded-lg border border-slate-700">
+                            <table class="w-full text-sm">
+                                <thead class="bg-slate-800 text-slate-300">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left">Compartment</th>
+                                        <th class="px-4 py-3 text-left">Assigned Items (kg)</th>
+                                        <th class="px-4 py-3 text-right">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-700 bg-slate-900/50" id="lowerPlanTable"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Main Deck Instructions -->
+                    <div>
+                        <h4 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">Main Deck
+                            Allocation</h4>
+                        <div class="overflow-hidden rounded-lg border border-slate-700 max-h-[400px] overflow-y-auto">
+                            <table class="w-full text-sm">
+                                <thead class="bg-slate-800 text-slate-300 sticky top-0">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left">Position</th>
+                                        <th class="px-4 py-3 text-right">Assigned Weight (kg)</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-700 bg-slate-900/50" id="mainPlanTable"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Loadsheet Summary -->
+            <div class="bg-slate-800 p-4 rounded-lg shadow-lg">
+                <h3 class="font-semibold text-slate-300 mb-4 border-b border-slate-600 pb-1">Projects Loadsheet Summary
+                    (After Relocation)</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left">
+                        <thead class="text-xs text-slate-400 uppercase bg-slate-700">
+                            <tr>
+                                <th class="px-4 py-2">Item</th>
+                                <th class="px-4 py-2 text-right">Weight (kg)</th>
+                                <th class="px-4 py-2 text-right">Index</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-700 text-slate-300">
+                            <tr class="bg-slate-700/50">
+                                <td class="px-4 py-2">Total Load</td>
+                                <td class="px-4 py-2 text-right font-mono text-yellow-400 font-bold text-lg"
+                                    id="val-load-wt">0.0</td>
+                                <td class="px-4 py-2 text-right font-mono text-yellow-400 font-bold text-lg"
+                                    id="val-load-idx">0.0</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-2">Zero Fuel Weight (ZFW)</td>
+                                <td class="px-4 py-2 text-right font-mono font-bold" id="val-zfw-wt">0.0</td>
+                                <td class="px-4 py-2 text-right font-mono font-bold" id="val-zfw-idx">0.0</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-2 flex flex-col">
+                                    <span>Takeoff Fuel</span>
+                                    <span class="text-xs text-slate-500">(FOB - 380 Taxi)</span>
+                                </td>
+                                <td class="px-4 py-2 text-right font-mono text-green-400" id="val-to-fuel-wt">0.0</td>
+                                <td class="px-4 py-2 text-right font-mono text-green-400" id="val-to-fuel-idx">0.0</td>
+                            </tr>
+                            <tr class="bg-slate-700/30 font-bold border-t border-slate-500/50">
+                                <td class="px-4 py-2">TOW</td>
+                                <td class="px-4 py-2 text-right font-mono text-white" id="val-tow-wt">0.0</td>
+                                <td class="px-4 py-2 text-right font-mono text-white" id="val-tow-idx">0.0</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-2 text-slate-400 flex flex-col">
+                                    <span>Remaining Fuel (@ LNDG)</span>
+                                    <span class="text-xs text-slate-500">(TO Fuel - Trip Fuel)</span>
+                                </td>
+                                <td class="px-4 py-2 text-right font-mono text-slate-400" id="val-trip-rem-wt">0.0</td>
+                                <td class="px-4 py-2 text-right font-mono text-slate-400" id="val-trip-idx">0.0</td>
+                            </tr>
+                            <tr class="border-t border-slate-600">
+                                <td class="px-4 py-2">Landing Weight (LW)</td>
+                                <td class="px-4 py-2 text-right font-mono" id="val-lw-wt">0.0</td>
+                                <td class="px-4 py-2 text-right font-mono" id="val-lw-idx">0.0</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT -->
+    <script>
+        const PMC_COEFFICIENTS = [-0.0086, -0.0065, -0.0052, -0.0039, -0.0024, -0.0011, 0.0002, 0.0015, 0.0027, 0.0040, 0.0053, 0.0066, 0.0079];
+        const PAG_COEFFICIENTS = [-0.0086, -0.0074, -0.0063, -0.0051, -0.0039, -0.0027, -0.0015, -0.0003, 0.0009, 0.0020, 0.0032, 0.0044, 0.0056, 0.0068, 0.0080];
+
+        const LOWER_DECK_LIMITS = { cpt1: 2469, cpt2: 4672, cpt3: 3773, cpt4: 5606 };
+        const LOWER_DECK_MAX = [2469, 4672, 3773, 5606]; // Array for easier access
+        const TOTAL_LOWER_CAPACITY = 16520;
+
+        const LOWER_DECK_TABLE = {
+            cpt1: [{ max: 67, val: 0 }, { max: 213, val: -1 }, { max: 361, val: -2 }, { max: 508, val: -3 }, { max: 656, val: -4 }, { max: 803, val: -5 }, { max: 956, val: -6 }, { max: 1098, val: -7 }, { max: 1246, val: -8 }, { max: 1393, val: -9 }, { max: 1541, val: -10 }, { max: 1688, val: -11 }, { max: 1836, val: -12 }, { max: 1983, val: -13 }, { max: 2131, val: -14 }, { max: 2278, val: -15 }, { max: 2426, val: -16 }, { max: 2469, val: -17 }],
+            cpt2: [{ max: 103, val: 0 }, { max: 334, val: -1 }, { max: 555, val: -2 }, { max: 796, val: -3 }, { max: 1027, val: -4 }, { max: 1258, val: -5 }, { max: 1489, val: -6 }, { max: 1719, val: -7 }, { max: 1950, val: -8 }, { max: 2181, val: -9 }, { max: 2412, val: -10 }, { max: 2643, val: -11 }, { max: 2874, val: -12 }, { max: 3105, val: -13 }, { max: 3336, val: -14 }, { max: 3566, val: -15 }, { max: 3797, val: -16 }, { max: 4028, val: -17 }, { max: 4259, val: -18 }, { max: 4490, val: -19 }, { max: 4672, val: -20 }],
+            cpt3: [{ max: 125, val: 0 }, { max: 404, val: 1 }, { max: 683, val: 2 }, { max: 962, val: 3 }, { max: 1242, val: 4 }, { max: 1521, val: 5 }, { max: 1800, val: 6 }, { max: 2079, val: 7 }, { max: 2358, val: 8 }, { max: 2637, val: 9 }, { max: 2916, val: 10 }, { max: 3195, val: 11 }, { max: 3474, val: 12 }, { max: 3753, val: 13 }, { max: 3773, val: 14 }],
+            cpt4: [{ max: 67, val: 0 }, { max: 216, val: 1 }, { max: 365, val: 2 }, { max: 514, val: 3 }, { max: 663, val: 4 }, { max: 812, val: 5 }, { max: 961, val: 6 }, { max: 1110, val: 7 }, { max: 1259, val: 8 }, { max: 1408, val: 9 }, { max: 1558, val: 10 }, { max: 1707, val: 11 }, { max: 1856, val: 12 }, { max: 2005, val: 13 }, { max: 2153, val: 14 }, { max: 2303, val: 15 }, { max: 2452, val: 16 }, { max: 2601, val: 17 }, { max: 2750, val: 18 }, { max: 2899, val: 19 }, { max: 3048, val: 20 }, { max: 3198, val: 21 }, { max: 3348, val: 22 }, { max: 3496, val: 23 }, { max: 3646, val: 24 }, { max: 3794, val: 25 }, { max: 3943, val: 26 }, { max: 4092, val: 27 }, { max: 4241, val: 28 }, { max: 4390, val: 29 }, { max: 4539, val: 30 }, { max: 4689, val: 31 }, { max: 4838, val: 32 }, { max: 4987, val: 33 }, { max: 5136, val: 34 }, { max: 5285, val: 35 }, { max: 5434, val: 36 }, { max: 5583, val: 37 }, { max: 5606, val: 38 }]
+        };
+        const FUEL_TABLE = [{ w: 500, i: 0.08 }, { w: 1000, i: 0.17 }, { w: 1500, i: 0.29 }, { w: 2000, i: 0.40 }, { w: 2500, i: 0.54 }, { w: 3000, i: 0.70 }, { w: 3500, i: 0.86 }, { w: 4000, i: 1.02 }, { w: 4500, i: 1.21 }, { w: 5000, i: 1.40 }, { w: 5500, i: 1.59 }, { w: 6000, i: 1.81 }, { w: 6500, i: 2.03 }, { w: 7000, i: 2.31 }, { w: 7500, i: 2.58 }, { w: 8000, i: 2.86 }, { w: 8500, i: 3.20 }, { w: 9000, i: 3.61 }, { w: 9500, i: 4.01 }, { w: 10000, i: 4.50 }, { w: 10500, i: 5.03 }, { w: 11000, i: 5.57 }, { w: 11500, i: 6.20 }, { w: 12000, i: 6.90 }, { w: 12500, i: 7.64 }, { w: 13000, i: 8.13 }, { w: 13500, i: 8.60 }, { w: 14000, i: 8.26 }, { w: 14500, i: 7.89 }, { w: 15000, i: 7.47 }, { w: 16000, i: 6.64 }, { w: 17000, i: 5.82 }, { w: 18000, i: 5.02 }, { w: 19000, i: 4.21 }, { w: 20000, i: 3.47 }, { w: 21000, i: 2.71 }, { w: 22000, i: 1.99 }, { w: 23000, i: 1.28 }, { w: 24000, i: 0.53 }, { w: 25000, i: -0.17 }, { w: 26000, i: -0.92 }, { w: 27000, i: -1.61 }, { w: 28000, i: -2.36 }, { w: 29000, i: -3.07 }, { w: 30000, i: -3.77 }, { w: 32000, i: -5.36 }, { w: 33000, i: -5.88 }, { w: 35000, i: -7.04 }, { w: 35855, i: -7.47 }];
+        
+        const FWD_VOL_LIMIT = 19.0;
+        const AFT_VOL_LIMIT = 30.7;
+
+        const state = {
+            type: 'PMC',
+            dow: 0, dowIndex: 0, fob: 0, trip: 0,
+            mainDeck: Array(15).fill(0),
+            bulkItems: Array(20).fill(0),
+            bulkDims: Array(20).fill({ l: 0, w: 0, h: 0 }),
+            lowerDeck: { cpt1: 0, cpt2: 0, cpt3: 0, cpt4: 0 },
+            lowerDeck: { cpt1: 0, cpt2: 0, cpt3: 0, cpt4: 0 },
+            lowerDeckLists: { cpt1: [], cpt2: [], cpt3: [], cpt4: [] }
+        };
+
+        function getMainDeckLimit(type, posIndex) {
+            if (type === 'PAG') {
+                if (posIndex === 0) return 2716;
+                if (posIndex === 7 || posIndex === 8) return 4264;
+                return 2948;
+            } else {
+                if (posIndex === 0) return 2856;
+                if (posIndex === 5 || posIndex === 6) return 4652;
+                return 3216;
+            }
+        }
+
+        function init() {
+            document.getElementById('typeSelect').addEventListener('change', (e) => {
+                state.type = e.target.value;
+                renderMainDeckInputs();
+                calculate();
+            });
+
+            document.addEventListener('input', (e) => {
+                if (e.target.matches('.calc-input')) handleInput(e);
+            });
+            document.addEventListener('click', (e) => {
+                if(e.target.matches('.toggle-dim-btn')) {
+                    const idx = e.target.dataset.idx;
+                    document.getElementById('dims-'+idx).classList.toggle('hidden');
+                }
+            });
+
+            document.getElementById('optimizeBtn').addEventListener('click', optimize);
+
+            renderMainDeckInputs();
+            renderBulkInputs();
+            calculate();
+        }
+
+        function handleInput(e) {
+            const field = e.target.dataset.field;
+            const val = parseFloat(e.target.value) || 0;
+            if (field === 'dow') state.dow = val;
+            if (field === 'dowIndex') state.dowIndex = val;
+            if (field === 'fob') state.fob = val;
+            if (field === 'trip') state.trip = val;
+            if (field.startsWith('main-')) state.mainDeck[parseInt(field.split('-')[1])] = val;
+            if (field.startsWith('main-')) state.mainDeck[parseInt(field.split('-')[1])] = val;
+            if (field.startsWith('bulk-') && !field.includes('dim')) state.bulkItems[parseInt(field.split('-')[1])] = val;
+            if (field.startsWith('bulk-dim-')) {
+                const parts = field.split('-');
+                const type = parts[2]; // l, w, h
+                const idx = parseInt(parts[3]);
+                const dims = { ...state.bulkDims[idx] };
+                dims[type] = val;
+                state.bulkDims[idx] = dims;
+            }
+        }
+
+        function renderMainDeckInputs() {
+            const container = document.getElementById('mainDeckGrid');
+            container.innerHTML = '';
+            const count = state.type === 'PMC' ? 13 : 15;
+            for (let i = 0; i < count; i++) {
+                const limit = getMainDeckLimit(state.type, i);
+                const div = document.createElement('div');
+                div.className = 'flex flex-col';
+                div.innerHTML = '<div class="flex justify-between items-end mb-1">' +
+                    '<label class="text-xs text-slate-400">Pos ' + (i + 1) + '</label>' +
+                    '<span class="text-[10px] text-slate-600">Max ' + limit + '</span>' +
+                    '</div>' +
+                    '<input type="number" data-field="main-' + i + '" value="' + (state.mainDeck[i] || '') + '" ' +
+                    'class="calc-input bg-slate-800 border border-slate-700 rounded p-2 text-right text-white focus:border-blue-500 outline-none" placeholder="kg">';
+                container.appendChild(div);
+            }
+        }
+
+        function renderBulkInputs() {
+            const container = document.getElementById('bulkList');
+            container.innerHTML = '';
+            container.className = 'grid grid-cols-1 md:grid-cols-2 gap-2 max-h-[400px] overflow-y-auto pr-1';
+            
+            for (let i = 0; i < 20; i++) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'bg-slate-700/50 p-2 rounded border border-slate-600';
+                
+                const wVal = state.bulkItems[i] || '';
+                const d = state.bulkDims[i] || {l:0, w:0, h:0};
+
+                wrapper.innerHTML = 
+                    `<div class="flex gap-2 items-center justify-between mb-1">
+                        <span class="text-xs text-slate-400 w-4">#${i+1}</span>
+                        <input type="number" data-field="bulk-${i}" value="${wVal}" 
+                            class="calc-input bg-slate-800 text-white p-1 rounded w-20 text-right text-sm border border-slate-600 focus:border-blue-500 outline-none" placeholder="kg">
+                        <button class="toggle-dim-btn text-[10px] bg-slate-600 hover:bg-blue-600 px-2 py-1 rounded text-slate-300 transition" data-idx="${i}">DIM</button>
+                    </div>
+                    <div id="dims-${i}" class="hidden grid grid-cols-3 gap-1 mt-1">
+                        <input type="number" data-field="bulk-dim-l-${i}" value="${d.l||''}" placeholder="L" class="calc-input bg-slate-800 text-slate-200 text-[10px] p-1 rounded text-center border border-slate-600 outline-none">
+                        <input type="number" data-field="bulk-dim-w-${i}" value="${d.w||''}" placeholder="W" class="calc-input bg-slate-800 text-slate-200 text-[10px] p-1 rounded text-center border border-slate-600 outline-none">
+                        <input type="number" data-field="bulk-dim-h-${i}" value="${d.h||''}" placeholder="H" class="calc-input bg-slate-800 text-slate-200 text-[10px] p-1 rounded text-center border border-slate-600 outline-none">
+                    </div>`;
+                container.appendChild(wrapper);
+            }
+        }
+
+        function calculate() {
+            const totalBulk = state.bulkItems.reduce(function (a, b) { return a + (parseFloat(b) || 0) }, 0);
+            const dispEl = document.getElementById('totalBulkDisplay');
+            if (dispEl) {
+                dispEl.textContent = totalBulk + " / " + TOTAL_LOWER_CAPACITY + " kg";
+                dispEl.className = totalBulk > TOTAL_LOWER_CAPACITY ? "text-red-500 font-mono" : "text-blue-400 font-mono";
+            }
+        }
+
+        function optimize() {
+            console.log("Optimizing with spread + limits...");
+            const coeffs = state.type === 'PMC' ? PMC_COEFFICIENTS : PAG_COEFFICIENTS;
+            const count = state.type === 'PMC' ? 13 : 15;
+
+            let mainItems = state.mainDeck.slice(0, count).filter(function (w) { return w > 0 });
+            let bulkItems = state.bulkItems.filter(function (w) { return w > 0 });
+
+            const globalMax = Math.max(4652, 4264);
+            if (mainItems.some(function (w) { return w > globalMax })) {
+                alert("One or more Main Deck items exceeds the absolute maximum weight limit (" + globalMax + "kg) for any position!");
+                return;
+            }
+
+            while (mainItems.length < count) mainItems.push(0);
+
+            let bestState = null;
+            let bestDiff = Infinity;
+            let bestSpreadScore = Infinity; // Lower is better (min peak utilization)
+
+            // Increased iterations for better search
+            for (let i = 0; i < 15000; i++) {
+                // 1. Shuffle Main Deck & Validate
+                const shuffledMain = [...mainItems].sort(function () { return Math.random() - 0.5 });
+                let validMain = true;
+                for (let p = 0; p < count; p++) {
+                    if (shuffledMain[p] > getMainDeckLimit(state.type, p)) {
+                        validMain = false;
+                        break;
+                    }
+                }
+                if (!validMain) continue;
+
+                // 2. Shuffle Bulk
+                let buckets = [0, 0, 0, 0];
+                let bucketLists = [[], [], [], []];
+                let bucketVols = [0, 0, 0, 0];
+                let validBulk = true;
+                
+                // We need indices to look up dimensions from state.bulkDims
+                const bulkIndices = bulkItems.map((_, idx) => idx);
+                const shuffledIndices = bulkIndices.sort(() => Math.random() - 0.5);
+
+                for (let originalIdx of shuffledIndices) {
+                    const itemWeight = bulkItems[originalIdx]; // Wait, bulkItems is filtered val?
+                    // Ah, line 334: let bulkItems = state.bulkItems.filter(function (w) { return w > 0 });
+                    // This loses the index. I need to fix that.
+                }
+
+                // RE-FETCH items with indices
+                const activeBulkItems = state.bulkItems
+                    .map((w, i) => ({ w, i, dims: state.bulkDims[i] }))
+                    .filter(obj => obj.w > 0);
+                
+                const shuffledBulkObjects = [...activeBulkItems].sort(() => Math.random() - 0.5);
+
+                for (let itemObj of shuffledBulkObjects) {
+                    let placed = false;
+                    const itemWeight = itemObj.w;
+                    
+                    // Volume in m3
+                    const dim = itemObj.dims;
+                    const vol = (dim && dim.l && dim.w && dim.h) ? (dim.l * dim.w * dim.h) / 1000000 : 0;
+
+                    // Try random start to vary distribution
+                    const start = Math.floor(Math.random() * 4);
+
+                    for (let k = 0; k < 4; k++) {
+                        const b = (start + k) % 4;
+                        
+                        // Weight Check
+                        if (buckets[b] + itemWeight > LOWER_DECK_LIMITS['cpt' + (b + 1)]) continue;
+                        
+                        // Volume Check
+                        let fwdVol = bucketVols[0] + bucketVols[1];
+                        let aftVol = bucketVols[2] + bucketVols[3];
+                        
+                        if (b < 2) fwdVol += vol; else aftVol += vol;
+
+                        if (fwdVol <= FWD_VOL_LIMIT && aftVol <= AFT_VOL_LIMIT) {
+                            buckets[b] += itemWeight;
+                            bucketVols[b] += vol;
+                            bucketLists[b].push(itemWeight); // We just store weight in list for display
+                            placed = true;
+                            break;
+                        }
+                    }
+                    if (!placed) { validBulk = false; break; }
+                }
+
+                if (validBulk) {
+                    let idx = 0;
+                    idx += getLowerDeckIndex('cpt1', buckets[0]);
+                    idx += getLowerDeckIndex('cpt2', buckets[1]);
+                    idx += getLowerDeckIndex('cpt3', buckets[2]);
+                    idx += getLowerDeckIndex('cpt4', buckets[3]);
+
+                    shuffledMain.forEach(function (w, pos) { idx += w * (coeffs[pos] || 0); });
+
+                    const diff = Math.abs(idx - 20);
+
+                    // SPREAD METRIC: Max % Utilization across bins
+                    // We want to minimize the peak utilization to spread the load
+                    let maxUtil = 0;
+                    for (let b = 0; b < 4; b++) {
+                        const util = buckets[b] / LOWER_DECK_MAX[b];
+                        if (util > maxUtil) maxUtil = util;
+                    }
+
+                    // DECISION LOGIC
+                    // 1. If Index is drastically better (> 0.2 improvement), take it.
+                    // 2. If Index is similar (within 0.2), take the one with better Spread (lower maxUtil).
+
+                    let isBetter = false;
+
+                    if (bestState === null) {
+                        isBetter = true;
+                    } else {
+                        const diffImprovement = bestDiff - diff; // Positive = New is better
+
+                        if (diffImprovement > 0.1) {
+                            // Significant Index improvement
+                            isBetter = true;
+                        } else if (diffImprovement > -0.1) {
+                            // Similar Index (within +/- 0.1) -> Check Spread
+                            if (maxUtil < bestSpreadScore) {
+                                isBetter = true;
+                            }
+                        }
+                    }
+
+                    if (isBetter) {
+                        bestDiff = diff;
+                        bestSpreadScore = maxUtil;
+                        bestState = { main: shuffledMain, buckets: buckets, bucketLists: bucketLists };
+                    }
+                }
+            }
+
+            if (!bestState) {
+                alert("Optimization Failed. Could not find a valid arrangement matching all constraints.");
+                return;
+            }
+
+            // Apply
+            if (bestState) {
+                document.getElementById('optStatus').textContent = "Success! Index Deviation: " + bestDiff.toFixed(2);
+                document.getElementById('resultsSection').classList.remove('hidden');
+
+                // Render Main Plan
+                const mainTable = document.getElementById('mainPlanTable');
+                mainTable.innerHTML = '';
+                for (let i = 0; i < count; i++) {
+                    const w = bestState.main[i];
+                    const limit = getMainDeckLimit(state.type, i);
+                    if (w > 0) {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML =
+                            '<td class="px-4 py-2 border-b border-slate-700">' +
+                            '<div class="font-bold text-blue-400">Position ' + (i + 1) + '</div>' +
+                            '<div class="text-[10px] text-slate-500">Max ' + limit + ' kg</div>' +
+                            '</td>' +
+                            '<td class="px-4 py-2 border-b border-slate-700 text-right font-mono">' + w + ' kg</td>';
+                        mainTable.appendChild(tr);
+                    }
+                }
+
+                // Render Lower Plan
+                const lowerTable = document.getElementById('lowerPlanTable');
+                lowerTable.innerHTML = '';
+                for (let i = 0; i < 4; i++) {
+                    const items = bestState.bucketLists[i].join(', ');
+                    const total = bestState.buckets[i];
+                    const tr = document.createElement('tr');
+                    tr.innerHTML =
+                        '<td class="px-4 py-2 border-b border-slate-700 text-slate-300">CPT ' + (i + 1) + '</td>' +
+                        '<td class="px-4 py-2 border-b border-slate-700 text-green-300 font-mono text-xs">' + (items || '-') + '</td>' +
+                        '<td class="px-4 py-2 border-b border-slate-700 text-right font-bold">' + total + ' kg</td>';
+                    lowerTable.appendChild(tr);
+                }
+
+                state.lowerDeck.cpt1 = bestState.buckets[0];
+                state.lowerDeck.cpt2 = bestState.buckets[1];
+                state.lowerDeck.cpt3 = bestState.buckets[2];
+                state.lowerDeck.cpt4 = bestState.buckets[3];
+                const originalMain = [...state.mainDeck];
+                state.mainDeck = bestState.main;
+                calculateSummary();
+                state.mainDeck = originalMain;
+            }
+        }
+
+        function calculateSummary() {
+            const coeffs = state.type === 'PMC' ? PMC_COEFFICIENTS : PAG_COEFFICIENTS;
+
+            let totalMainWt = 0; let totalMainIdx = 0;
+            state.mainDeck.forEach(function (w, i) {
+                totalMainWt += w;
+                totalMainIdx += w * (coeffs[i] || 0);
+            });
+
+            let totalLowerWt = 0; let totalLowerIdx = 0;
+            ['cpt1', 'cpt2', 'cpt3', 'cpt4'].forEach(function (key) {
+                const w = state.lowerDeck[key] || 0;
+                totalLowerWt += w;
+                totalLowerIdx += getLowerDeckIndex(key, w);
+            });
+
+            const loadWt = totalMainWt + totalLowerWt;
+            const loadIdx = totalMainIdx + totalLowerIdx;
+
+            const TAXI = 380;
+            const toFuel = Math.max(0, state.fob - TAXI);
+            const toFuelIdx = interpolateFuelIndex(toFuel);
+            const remFuel = Math.max(0, toFuel - state.trip);
+            const remFuelIdx = interpolateFuelIndex(remFuel);
+
+            const zfw = state.dow + loadWt;
+            const zfwIdx = state.dowIndex + loadIdx;
+            const tow = zfw + toFuel;
+            const towIdx = zfwIdx + toFuelIdx;
+            const lw = tow - state.trip;
+            const lwIdx = zfwIdx + remFuelIdx;
+
+            updateVal('val-load-wt', loadWt);
+            updateVal('val-load-idx', loadIdx);
+            updateVal('val-zfw-wt', zfw);
+            updateVal('val-zfw-idx', zfwIdx);
+            updateVal('val-to-fuel-wt', toFuel);
+            updateVal('val-to-fuel-idx', toFuelIdx);
+            updateVal('val-tow-wt', tow);
+            updateVal('val-tow-idx', towIdx);
+            updateVal('val-trip-rem-wt', remFuel);
+            updateVal('val-trip-idx', remFuelIdx);
+            updateVal('val-lw-wt', lw);
+            updateVal('val-lw-idx', lwIdx);
+        }
+
+        function updateVal(id, val) {
+            const el = document.getElementById(id);
+            if (el) el.textContent = val.toFixed(1);
+        }
+        function interpolateFuelIndex(w) { if (w <= 0) return 0; if (w < FUEL_TABLE[0].w) return FUEL_TABLE[0].i; for (let k = 0; k < FUEL_TABLE.length - 1; k++) { if (w >= FUEL_TABLE[k].w && w <= FUEL_TABLE[k + 1].w) { const r = (w - FUEL_TABLE[k].w) / (FUEL_TABLE[k + 1].w - FUEL_TABLE[k].w); return FUEL_TABLE[k].i + r * (FUEL_TABLE[k + 1].i - FUEL_TABLE[k].i); } } return FUEL_TABLE[FUEL_TABLE.length - 1].i; }
+        function getLowerDeckIndex(cpt, w) { const t = LOWER_DECK_TABLE[cpt]; if (!t) return 0; for (let e of t) { if (w <= e.max) return e.val; } return t[t.length - 1].val; }
+
+        init();
+    </script>
+</body>
+
+</html>
