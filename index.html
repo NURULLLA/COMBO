@@ -1486,9 +1486,16 @@
                 list.forEach((item, listIdx) => {
                     const vol = item.dims && item.dims.l ? ((item.dims.l * item.dims.w * item.dims.h) / 1000000).toFixed(2) : 0;
                     itemsHtml += `<div class="draggable-item bg-slate-700 hover:bg-slate-600 border border-slate-500 text-xs px-2 py-1 rounded cursor-grab shadow-sm flex flex-col items-center"
-                                           draggable="true" 
+                                           draggable="true"
                                            ondragstart="handleDragStart(event, '${key}', ${listIdx})">
-                                        <span class="font-bold text-white">${item.w}kg</span>
+                                        <div class="flex items-center gap-0.5" onclick="event.stopPropagation()" ondragstart="event.stopPropagation();return false;">
+                                            <input type="number" inputmode="decimal"
+                                                value="${item.w}"
+                                                class="w-14 bg-transparent text-white font-bold text-xs text-center focus:outline-none focus:bg-slate-600 rounded px-0.5"
+                                                onchange="updateLowerDeckItemWeight('${key}', ${listIdx}, this.value)"
+                                                onclick="this.select()">
+                                            <span class="text-[10px] text-slate-400">kg</span>
+                                        </div>
                                         ${vol > 0 ? `<span class="text-[9px] text-slate-400">${vol}m³</span>` : ''}
                                       </div>`;
                 });
@@ -1588,6 +1595,18 @@
             // Reset
             draggedItem = null;
             sourceCpt = null;
+        };
+
+        window.updateLowerDeckItemWeight = function(cpt, listIdx, newVal) {
+            const item = state.lowerDeckLists[cpt] && state.lowerDeckLists[cpt][listIdx];
+            if (!item) return;
+            const newW = parseFloat(newVal);
+            if (!newW || newW <= 0) return;
+            item.w = newW;
+            state.lowerDeck[cpt] = state.lowerDeckLists[cpt].reduce((sum, i) => sum + i.w, 0);
+            calculateSummary();
+            renderResults();
+            saveState();
         };
 
         // --- MAIN DECK DRAG HANDLERS ---
