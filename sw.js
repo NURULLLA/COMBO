@@ -1,7 +1,6 @@
-const CACHE_NAME = 'cargo-trim-v5';
+const CACHE_NAME = 'cargo-trim-v6';
 
-// Local files — must be cached (app won't work without them)
-const LOCAL_ASSETS = [
+const ASSETS = [
     './',
     './index.html',
     './manifest.json',
@@ -22,39 +21,64 @@ const LOCAL_ASSETS = [
     './fonts/3e55b987707cedc8f821814309575d0f.ttf'
 ];
 
-// No more external CDN resources — everything is local now
-const EXTERNAL_ASSETS = [];
-
+// Install: cache each file individually so one failure doesn't break everything
 self.addEventListener('install', (event) => {
     event.waitUntil(
         caches.open(CACHE_NAME).then(async (cache) => {
-            // Cache local files first — these are required
-            await cache.addAll(LOCAL_ASSETS);
-            // Cache external resources individually — skip on failure
-            for (const url of EXTERNAL_ASSETS) {
-                try {
-                    await cache.add(url);
-                } catch (e) {
-                    console.warn('Could not cache external resource:', url);
-                }
-            }
+            let ok = 0;
+            await Promise.all(
+                ASSETS.map(url =>
+                    cache.add(url)
+                        .then(() => ok++)
+                        .catch(err => console.warn('[SW] skip:', url, err.message))
+                )
+            );
+            console.log(`[SW] v6 installed — cached ${ok}/${ASSETS.length} assets`);
         })
     );
     self.skipWaiting();
 });
 
-// Clear old caches on activate
+// Activate: delete all old caches
 self.addEventListener('activate', (event) => {
     event.waitUntil(
-        caches.keys().then((keys) =>
-            Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
+        caches.keys().then(keys =>
+            Promise.all(
+                keys.filter(k => k !== CACHE_NAME).map(k => {
+                    console.log('[SW] deleting old cache:', k);
+                    return caches.delete(k);
+                })
+            )
         )
     );
     self.clients.claim();
 });
 
+// Fetch: Cache-first → serve instantly offline.
+// When online, update cache in the background (stale-while-revalidate).
 self.addEventListener('fetch', (event) => {
+    // Only intercept same-origin GET requests
+    if (event.request.method !== 'GET') return;
+    const url = new URL(event.request.url);
+    if (url.origin !== location.origin) return;
+
     event.respondWith(
-        caches.match(event.request).then((response) => response || fetch(event.request))
+        caches.open(CACHE_NAME).then(async (cache) => {
+            const cached = await cache.match(event.request);
+
+            // Fetch in background to keep cache fresh
+            const networkFetch = fetch(event.request)
+                .then(response => {
+                    if (response && response.status === 200) {
+                        cache.put(event.request, response.clone());
+                    }
+                    return response;
+                })
+                .catch(() => null); // silent when offline
+
+            // Return cache immediately if available (offline-first)
+            // Otherwise wait for network
+            return cached || networkFetch;
+        })
     );
 });
