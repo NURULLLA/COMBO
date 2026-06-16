@@ -1204,30 +1204,21 @@
                         return;
                     }
 
-                    // Build ascending main deck assignment (fixed, respects per-position limits)
-                    const ascendingMain = computeAscendingMain(mainItems, count, state.uldType);
-
-                    // Validate that all weights fit their assigned positions
-                    let validMain = true;
-                    for (let p = 0; p < count; p++) {
-                        if (ascendingMain[p] > checkLimit(p)) { validMain = false; break; }
-                    }
-                    if (!validMain) {
-                        document.getElementById('optStatus').textContent = "⚠ Cannot place all weights within position limits!";
-                        document.getElementById('optStatus').className = 'text-xs text-red-400 h-4 font-mono font-bold tracking-tight';
-                        return;
-                    }
-
-                    // Pre-calculate main deck index contribution (fixed)
-                    let mainIdxContrib = 0;
-                    ascendingMain.forEach((w, pos) => { mainIdxContrib += w * (coeffs[pos] || 0); });
+                    while (mainItems.length < count) mainItems.push(0);
 
                     let bestState = null;
                     let bestDiff = Infinity;
                     let bestSpreadScore = Infinity;
+                    let bestInversions = Infinity;
 
-                    // Only optimize lower deck distribution (main deck is now fixed ascending)
                     for (let i = 0; i < 10000; i++) {
+                        const shuffledMain = [...mainItems].sort(() => Math.random() - 0.5);
+                        let validMain = true;
+                        for (let p = 0; p < count; p++) {
+                            if (shuffledMain[p] > checkLimit(p)) { validMain = false; break; }
+                        }
+                        if (!validMain) continue;
+
                         let buckets = [0, 0, 0, 0];
                         let bucketLists = [[], [], [], []];
                         let bucketVols = [0, 0, 0, 0];
@@ -1276,8 +1267,9 @@
                         }
 
                         if (validBulk) {
-                            let idx = mainIdxContrib;
+                            let idx = 0;
                             for (let b = 0; b < 4; b++) idx += getLowerDeckIndex('cpt' + (b + 1), buckets[b]);
+                            shuffledMain.forEach((w, pos) => { idx += w * (coeffs[pos] || 0); });
 
                             const diff = Math.abs(idx - 20);
                             let maxUtil = 0;
@@ -1286,18 +1278,33 @@
                                 if (util > maxUtil) maxUtil = util;
                             }
 
+                            // Count inversions: pairs where heavier weight is before lighter one.
+                            // Fewer inversions = closer to ascending order front→tail.
+                            let inversions = 0;
+                            for (let a = 0; a < count - 1; a++) {
+                                if (shuffledMain[a] === 0) continue;
+                                for (let b = a + 1; b < count; b++) {
+                                    if (shuffledMain[b] === 0) continue;
+                                    if (shuffledMain[a] > shuffledMain[b]) inversions++;
+                                }
+                            }
+
                             let isBetter = false;
                             if (bestState === null) isBetter = true;
                             else {
                                 const diffImp = bestDiff - diff;
                                 if (diffImp > 0.1) isBetter = true;
-                                else if (diffImp > -0.1 && maxUtil < bestSpreadScore) isBetter = true;
+                                else if (diffImp > -0.1) {
+                                    if (inversions < bestInversions) isBetter = true;
+                                    else if (inversions === bestInversions && maxUtil < bestSpreadScore) isBetter = true;
+                                }
                             }
 
                             if (isBetter) {
                                 bestDiff = diff;
                                 bestSpreadScore = maxUtil;
-                                bestState = { main: ascendingMain, buckets: buckets, bucketLists: bucketLists };
+                                bestInversions = inversions;
+                                bestState = { main: shuffledMain, buckets: buckets, bucketLists: bucketLists };
                             }
                         }
                     }
