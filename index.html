@@ -1216,8 +1216,6 @@
                     console.log("Optimizing with combined bulk pool + search...");
                     const coeffs = state.uldType === 'PMC' ? PMC_COEFFICIENTS : PAG_COEFFICIENTS;
                     const count = state.uldType === 'PMC' ? 13 : 15;
-                    const checkLimit = (idx) => getMainDeckLimit(state.uldType, idx);
-
                     let mainItems = state.mainDeck.slice(0, count).filter(w => w > 0);
 
                     // Tech Kit 2 reserves capacity in its compartment
@@ -1601,7 +1599,10 @@
             const item = state.lowerDeckLists[cpt] && state.lowerDeckLists[cpt][listIdx];
             if (!item) return;
             const newW = parseFloat(newVal);
-            if (!newW || newW <= 0) return;
+            if (isNaN(newW) || newW <= 0) {
+                renderResults(); // restore correct value in the input
+                return;
+            }
             item.w = newW;
             state.lowerDeck[cpt] = state.lowerDeckLists[cpt].reduce((sum, i) => sum + i.w, 0);
             calculateSummary();
