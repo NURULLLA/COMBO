@@ -1070,22 +1070,57 @@
             }
         }
 
-        // Returns a new array[count] with weights placed ascending front→tail,
-        // respecting per-position limits. Lightest weight gets the earliest valid slot.
+        // Returns array[count] with weights placed ascending front→tail.
+        // Super-heavy weights (exceed standard position limit) are reserved to
+        // the last available high-limit positions so lighter weights stay forward.
         function computeAscendingMain(rawItems, count, uldType) {
-            const sorted = rawItems.filter(w => w > 0).sort((a, b) => a - b);
-            const available = Array.from({length: count}, (_, i) => i);
-            const result = new Array(count).fill(0);
-            for (const w of sorted) {
-                for (let j = 0; j < available.length; j++) {
-                    const pos = available[j];
-                    if (w <= getMainDeckLimit(uldType, pos)) {
-                        result[pos] = w;
-                        available.splice(j, 1);
-                        break;
-                    }
-                }
+            const items = rawItems.filter(w => w > 0);
+            if (items.length === 0) return new Array(count).fill(0);
+
+            const standardLimit = uldType === 'PMC' ? 3216 : 2948;
+
+            // Positions whose limit exceeds the standard (can accept super-heavy pallets)
+            const highLimitPos = [];
+            for (let i = 0; i < count; i++) {
+                if (getMainDeckLimit(uldType, i) > standardLimit) highLimitPos.push(i);
             }
+
+            const superHeavy = items.filter(w => w > standardLimit).sort((a, b) => a - b);
+            const normal     = items.filter(w => w <= standardLimit).sort((a, b) => a - b);
+
+            if (superHeavy.length > highLimitPos.length) return null;
+
+            // Reserve the LAST N high-limit positions for super-heavy pallets
+            // so they sit as far toward the tail as the limits allow.
+            const reserved = new Set(highLimitPos.slice(highLimitPos.length - superHeavy.length));
+
+            // Remaining positions available for normal weights (front to tail order)
+            const normalPositions = [];
+            for (let i = 0; i < count; i++) {
+                if (!reserved.has(i)) normalPositions.push(i);
+            }
+
+            const result = new Array(count).fill(0);
+
+            // Assign normal weights ascending to normal positions ascending.
+            // Skip any position whose individual limit is too low for the current weight.
+            let posIdx = 0;
+            for (const w of normal) {
+                while (posIdx < normalPositions.length &&
+                       w > getMainDeckLimit(uldType, normalPositions[posIdx])) {
+                    posIdx++;
+                }
+                if (posIdx >= normalPositions.length) return null;
+                result[normalPositions[posIdx]] = w;
+                posIdx++;
+            }
+
+            // Assign super-heavy weights ascending to reserved positions (front to tail)
+            const reservedSorted = [...reserved].sort((a, b) => a - b);
+            for (let k = 0; k < superHeavy.length; k++) {
+                result[reservedSorted[k]] = superHeavy[k];
+            }
+
             return result;
         }
 
@@ -1207,21 +1242,23 @@
                         return;
                     }
 
-                    while (mainItems.length < count) mainItems.push(0);
+                    // Fix main deck to ascending order (respects position limits)
+                    const ascendingMain = computeAscendingMain(mainItems, count, state.uldType);
+                    if (!ascendingMain) {
+                        document.getElementById('optStatus').textContent = "⚠ Too many super-heavy items for available high-limit positions!";
+                        document.getElementById('optStatus').className = 'text-xs text-red-400 h-4 font-mono font-bold tracking-tight';
+                        return;
+                    }
+
+                    // Main deck contribution is now fixed — only optimise lower deck
+                    let mainIdxContrib = 0;
+                    ascendingMain.forEach((w, pos) => { mainIdxContrib += w * (coeffs[pos] || 0); });
 
                     let bestState = null;
                     let bestDiff = Infinity;
                     let bestSpreadScore = Infinity;
-                    let bestInversions = Infinity;
 
                     for (let i = 0; i < 10000; i++) {
-                        const shuffledMain = [...mainItems].sort(() => Math.random() - 0.5);
-                        let validMain = true;
-                        for (let p = 0; p < count; p++) {
-                            if (shuffledMain[p] > checkLimit(p)) { validMain = false; break; }
-                        }
-                        if (!validMain) continue;
-
                         let buckets = [0, 0, 0, 0];
                         let bucketLists = [[], [], [], []];
                         let bucketVols = [0, 0, 0, 0];
@@ -1270,9 +1307,8 @@
                         }
 
                         if (validBulk) {
-                            let idx = 0;
+                            let idx = mainIdxContrib;
                             for (let b = 0; b < 4; b++) idx += getLowerDeckIndex('cpt' + (b + 1), buckets[b]);
-                            shuffledMain.forEach((w, pos) => { idx += w * (coeffs[pos] || 0); });
 
                             const diff = Math.abs(idx - 20);
                             let maxUtil = 0;
@@ -1281,33 +1317,18 @@
                                 if (util > maxUtil) maxUtil = util;
                             }
 
-                            // Count inversions: pairs where heavier weight is before lighter one.
-                            // Fewer inversions = closer to ascending order front→tail.
-                            let inversions = 0;
-                            for (let a = 0; a < count - 1; a++) {
-                                if (shuffledMain[a] === 0) continue;
-                                for (let b = a + 1; b < count; b++) {
-                                    if (shuffledMain[b] === 0) continue;
-                                    if (shuffledMain[a] > shuffledMain[b]) inversions++;
-                                }
-                            }
-
                             let isBetter = false;
                             if (bestState === null) isBetter = true;
                             else {
                                 const diffImp = bestDiff - diff;
                                 if (diffImp > 0.1) isBetter = true;
-                                else if (diffImp > -0.1) {
-                                    if (inversions < bestInversions) isBetter = true;
-                                    else if (inversions === bestInversions && maxUtil < bestSpreadScore) isBetter = true;
-                                }
+                                else if (diffImp > -0.1 && maxUtil < bestSpreadScore) isBetter = true;
                             }
 
                             if (isBetter) {
                                 bestDiff = diff;
                                 bestSpreadScore = maxUtil;
-                                bestInversions = inversions;
-                                bestState = { main: shuffledMain, buckets: buckets, bucketLists: bucketLists };
+                                bestState = { main: ascendingMain, buckets: buckets, bucketLists: bucketLists };
                             }
                         }
                     }
