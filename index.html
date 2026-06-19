@@ -1279,13 +1279,18 @@
                         let curMainIdxContrib = mainIdxContrib;
 
                         if (mode === 'index20') {
-                            shuffledMain = [...mainItems].sort(() => Math.random() - 0.5);
+                            // Assign items to a random subset of the available positions
+                            // (not just the first N) so single/few items can land anywhere.
+                            const posOrder = Array.from({ length: count }, (_, idx) => idx).sort(() => Math.random() - 0.5);
+                            const itemOrder = [...mainItems].sort(() => Math.random() - 0.5);
+                            shuffledMain = new Array(count).fill(0);
                             let validMain = true;
-                            for (let p = 0; p < count; p++) {
-                                if (shuffledMain[p] !== undefined && shuffledMain[p] > getMainDeckLimit(state.uldType, p)) { validMain = false; break; }
+                            for (let k = 0; k < itemOrder.length; k++) {
+                                const pos = posOrder[k];
+                                if (itemOrder[k] > getMainDeckLimit(state.uldType, pos)) { validMain = false; break; }
+                                shuffledMain[pos] = itemOrder[k];
                             }
                             if (!validMain) continue;
-                            while (shuffledMain.length < count) shuffledMain.push(0);
                             curMainIdxContrib = 0;
                             shuffledMain.forEach((w, pos) => { curMainIdxContrib += w * (coeffs[pos] || 0); });
                         }
