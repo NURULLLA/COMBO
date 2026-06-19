@@ -1045,7 +1045,7 @@
         // Helper to update Quick Bulk items from grid
         window.updateBulkItem = function (input) {
             const idx = parseInt(input.getAttribute('data-idx'));
-            const val = parseFloat(input.value) || 0;
+            const val = Math.max(0, parseFloat(input.value) || 0);
             state.bulkItems[idx] = val;
             updateTotalBulkDisplay();
             calculate();
@@ -1054,7 +1054,8 @@
 
         function handleInput(e) {
             const field = e.target.dataset.field;
-            const val = parseFloat(e.target.value) || 0;
+            if (!field) return; // not a field this handler manages (e.g. Quick Add bulk inputs)
+            const val = Math.max(0, parseFloat(e.target.value) || 0);
             const input = e.target;
 
             // Boundary Check UI
